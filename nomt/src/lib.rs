@@ -56,9 +56,6 @@ mod io;
 
 const MAX_COMMIT_CONCURRENCY: usize = 64;
 
-use std::sync::atomic::AtomicUsize;
-static COMMIT_NUMBER: AtomicUsize = AtomicUsize::new(0);
-
 /// A full value stored within the trie.
 pub type Value = Vec<u8>;
 
@@ -479,7 +476,7 @@ impl SessionParams {
 /// [`Session::finish`] or others and create a [`Witness`] that can be used to prove the
 /// correctness of replaying the same operations.
 pub struct Session<T> {
-    store: Store,
+    pub(crate) store: Store,
     merkle_updater: Updater,
     metrics: Metrics,
     rollback_delta: Option<rollback::ReverseDeltaBuilder>,
@@ -585,9 +582,9 @@ impl<T: HashAlgorithm> Session<T> {
         }
 
         {
-            let n_commit = COMMIT_NUMBER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let n_commit = self.store.commit_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let serialization = serde_json::to_string(&actuals).unwrap();
-            let dir = store::ACTUALS_DIR.get().unwrap();
+            let dir = &self.store.shared.actuals_dir;
             let path_name = dir.join(format!("actual{}", n_commit));
             if std::fs::exists(&path_name).unwrap() {
                 panic!("Move or clear already existing actual serialization");

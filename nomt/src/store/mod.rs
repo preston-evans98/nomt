@@ -16,7 +16,7 @@ use meta::Meta;
 use nomt_core::{page_id::PageId, trie::KeyPath};
 use parking_lot::Mutex;
 use std::{
-    fs::{File, OpenOptions}, path::PathBuf, sync::{atomic::AtomicBool, Arc, OnceLock}
+    fs::{File, OpenOptions}, path::PathBuf, sync::{atomic::{AtomicBool, AtomicUsize}, Arc}
 };
 
 #[cfg(target_os = "linux")]
@@ -30,16 +30,15 @@ mod meta;
 mod page_loader;
 mod sync;
 
-pub static ACTUALS_DIR: OnceLock<PathBuf> = OnceLock::new();
-
 /// This is a lightweight handle and can be cloned cheaply.
 #[derive(Clone)]
 pub struct Store {
-    shared: Arc<Shared>,
+    pub(crate) shared: Arc<Shared>,
     sync: Arc<Mutex<sync::Sync>>,
+    pub(crate) commit_count: Arc<AtomicUsize>,
 }
 
-struct Shared {
+pub(crate) struct Shared {
     values: beatree::Tree,
     pages: bitbox::DB,
     rollback: Option<Rollback>,
@@ -47,6 +46,7 @@ struct Shared {
     meta_fd: File,
     flock: Option<flock::Flock>,
     poisoned: AtomicBool,
+    pub(crate) actuals_dir: PathBuf,
 
     // Retained for the lifetime of the store.
     _db_dir_fd: Arc<File>,
@@ -135,13 +135,13 @@ impl Store {
         };
 
         // Create the actuals directory
-         {
+        let actuals_dir = {
             let path = o.path.join("actuals");
             if !std::fs::exists(&path)? {
                 std::fs::create_dir(&path)?;
             }
-            ACTUALS_DIR.set(path).unwrap();
-        }
+            path 
+        };
 
         #[cfg(target_os = "macos")]
         {
@@ -205,7 +205,9 @@ impl Store {
                 meta_fd,
                 flock: Some(flock),
                 poisoned: false.into(),
+                actuals_dir,
             }),
+            commit_count: Arc::new(AtomicUsize::new(0)),
         })
     }
 

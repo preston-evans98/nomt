@@ -587,11 +587,9 @@ impl<T: HashAlgorithm> Session<T> {
         {
             let n_commit = COMMIT_NUMBER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let serialization = serde_json::to_string(&actuals).unwrap();
-            if !std::fs::exists("actuals").unwrap() {
-                std::fs::create_dir_all("actuals").unwrap();
-            }
-            let path_name = format!("actuals/actual{}", n_commit);
-            if std::fs::exists("path_name").unwrap() {
+            let dir = store::ACTUALS_DIR.get().unwrap();
+            let path_name = dir.join(format!("actual{}", n_commit));
+            if std::fs::exists(&path_name).unwrap() {
                 panic!("Move or clear already existing actual serialization");
             }
             let mut output = std::fs::File::create(path_name).unwrap();

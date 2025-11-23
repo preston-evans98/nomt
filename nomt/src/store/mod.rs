@@ -16,8 +16,7 @@ use meta::Meta;
 use nomt_core::{page_id::PageId, trie::KeyPath};
 use parking_lot::Mutex;
 use std::{
-    fs::{File, OpenOptions},
-    sync::{atomic::AtomicBool, Arc},
+    fs::{File, OpenOptions}, path::PathBuf, sync::{atomic::AtomicBool, Arc, OnceLock}
 };
 
 #[cfg(target_os = "linux")]
@@ -30,6 +29,8 @@ mod flock;
 mod meta;
 mod page_loader;
 mod sync;
+
+pub static ACTUALS_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 /// This is a lightweight handle and can be cloned cheaply.
 #[derive(Clone)]
@@ -132,6 +133,15 @@ impl Store {
             }
             options.open(&o.path.join("wal"))?
         };
+
+        // Create the actuals directory
+         {
+            let path = o.path.join("actuals");
+            if !std::fs::exists(&path)? {
+                std::fs::create_dir(&path)?;
+            }
+            ACTUALS_DIR.set(path).unwrap();
+        }
 
         #[cfg(target_os = "macos")]
         {
